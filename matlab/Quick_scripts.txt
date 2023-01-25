@@ -1,0 +1,63 @@
+% load cell coordinates
+
+load("WT_default/Out_WT_default_11");
+
+% clean cell coordinates for XanC cells, we will work on these cells in the remainder
+
+cutoff = 0.1*boundaryY ;
+cells_xan = [];
+
+for i = 2 : 1 : 46
+	cells_xan{i} = cellsXc(find(cellsXc(1:numXanc(i), 2,i) > cutoff(i) &  cellsXc(1:numXanc(i), 2, i) < boundaryY(i) - cutoff(i)), :, i);
+end
+
+% compute nearest-neighbor-distance means for t = 2 : 46
+
+nnd = zeros(46,1);
+for i = 2:1 : 46 
+	[~ , nnd(i), ~] = getPeriodicDistMats(cells_xan{i}, boundaryX(i));
+end
+
+
+
+
+
+for j = 11:17
+days_of_disagreement = [];
+
+% load barcodes for t = 4 : 46 and compute num_stripes_clust
+num_stripes_clusters=zeros(46,1);
+num_stripes_NOclusters = zeros(46,1);
+for i = 4:46
+file =sprintf("PD_XanCsim%dtime%d_dim1",j,i);
+bars = importdata(file);
+%outfile = sprintf("test/stripe_count_2clust_sim1_XanC_time%d",i);
+num_stripes_clusters(i) = num_stripes_clust(bars, i , 0);
+num_stripes_NOclusters(i) = num_stripes_NOclust(bars, i , 0);
+end
+days_of_disagreement{j} =  find(num_stripes_clusters ~= num_stripes_NOclusters)
+
+F = figure;
+Y=[num_stripes_clusters,num_stripes_NOclusters];
+stairs(Y, "LineWidth", 3);
+titulo = sprintf("Clust v NoClust sim%d", j);
+title(titulo);
+salvar = sprintf("Comparing_stripe_counts/Clust_v_NoClust_sim%d", j);
+saveas(F, salvar);
+end
+
+
+% script to view pattern
+
+G=figure;
+thyme = ;
+scatter(cells_xan{thyme}(:,1),cells_xan{thyme}(:,2));
+axis equal;
+titulo = sprintf("Pattern at time %d",thyme);
+title(titulo);
+
+% plot num_stripes
+
+NN = figure;
+stairs(num_stripes,"LineWidth", 3);
+saveas(NN, "test/num_stripes");
