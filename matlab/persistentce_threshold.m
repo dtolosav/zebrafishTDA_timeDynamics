@@ -487,53 +487,129 @@ zlabel("probability (log scale)", "FontSize",20);
 % ________________________________________________________________________
 % 								THE HIKER
 % ________________________________________________________________________
-% Now we just need to plot this thing
 % ________________________________________________________________________
 
-p_thresh = zeros(46,1);
-slopes = diff(transpose(temp_survival_0(:,:))); % each column is a time_pt, each row is a persistence
-
+p_thresh = zeros(46,2); % coordinates are (time, dimension)
+slopes = cell(2,1);
+temp_survival_0 = zeros(46,81);
+temp_survival_1 = zeros(46,81);
+for i = 1: 46
+for j =1:81
+	temp_survival_0(i,j) = survival(i,1,j);
+	temp_survival_1(i,j) = survival(i,2,j);
+end
+end
+slopes{1} = diff(transpose(temp_survival_0)); % each column is a time_pt, each row is a persistence
+slopes{2} = diff(transpose(temp_survival_1)); % each column is a time_pt, each row is a persistence
+%
 % identifying the plateaus
-
-plats = cell(5,46); % columns are time_pt, rows are slots for plateaus
-for thyme = 2:46
-plat=[];
-plat_counter = 1; % this is really off by one, meaning is overcounting by 1
-	for j = 3 : 80
-		if slopes(j,thyme) == 0
-			plat = [plat j];
-		elseif length(plat) > 3 % we are requiring our plateaus to be at least 5 consecutive identical values on the survival function
-			plats{plat_counter,thyme} = plat;
-			plat_counter = plat_counter + 1;
-			plat=[];
+%
+plats = cell(5,46,2); % columns are time_pt, rows are slots for plateaus
+for dim = 1:2 % it's actually dim0 and dim1 
+	for thyme = 2:46
+	plat=[];
+	plat_counter = 1; % this is really off by one, meaning is overcounting by 1
+		for j = 1 : 80
+			if slopes{dim}(j,thyme) == 0
+				plat = [plat j];
+			elseif length(plat) > 1 & j~=80 % we are requiring our plateaus to be at least 4 consecutive identical values on the survival function
+				if plat(1) > 6
+					plats{plat_counter,thyme,dim} = plat;
+					plat_counter = plat_counter + 1;
+					plat=[];
+				else
+					plat=[];
+				end
+			else
+				plat=[];
+			end
+		end
+	end
+end
+len_plats = zeros(5,46, 2);
+largest_plats = cell(46,2);
+per_ivals = cell(5,46, 2);
+for dim = 1:2	
+	for thyme = 2:46
+		for k = 1: 5
+			len_plats(k,thyme,dim) = length(plats{k,thyme,dim});
+			if ~isempty(plats{k,thyme,dim})
+				per_ivals{k,thyme,dim} = [eval_vec(plats{k,thyme,dim}(1)) eval_vec(plats{k,thyme,dim}(end))];
+				%p_thresh(thyme,dim) = mean(per_ivals{1,thyme,dim});
+			end
+		end
+	end
+end
+sur_values_at_thresh = zeros(46,2);
+for dim = 1:2
+	for thyme = 1:46
+		[~,ttemp]=max(len_plats(:,thyme,dim));
+		if ttemp ~= 0
+			largest_plats{thyme,dim} = per_ivals{ttemp,thyme,dim};
 		else
-			plat=[];
+			largest_plats{thyme,dim} = [0 0];
+		end
+		p_thresh(thyme,dim) = mean(largest_plats{thyme,dim});
+			if p_thresh(thyme,dim) ~= 0 & ~isempty(largest_plats{thyme,dim})
+				sur_values_at_thresh(thyme,dim) = survival(thyme,dim,find(eval_vec == largest_plats{thyme,dim}(2)));
+			end
+	end
+end
+p_thresh_full_info = cell(2,1);
+confidence=zeros(46,2);
+for dim =1:2
+	for thyme = 1:46
+		if ~isempty(largest_plats{thyme,dim})
+			confidence(thyme,dim) = largest_plats{thyme,dim}(:,2) - largest_plats{thyme,dim}(:,1);
+		else confidence(thyme,dim) = 0;
 		end
 	end
 end
-len_plats = zeros(5,46);
-per_ivals = cell(5,46);
-for thyme = 2:46
-	for k = 1: 5
-		len_plats(k,thyme) = length(plats{k,thyme});
-		if ~isempty(plats{k,thyme})
-			per_ivals{k,thyme} = [eval_vec(plats{k,thyme}(1)) eval_vec(plats{k,thyme}(end))];
-			p_thresh(thyme) = mean(per_ivals{1,thyme});
-		end
-	end
-end
+p_thresh_full_info{1} = [p_thresh(:,1) confidence(:,1) sur_values_at_thresh(:,1)];
+p_thresh_full_info{2} = [p_thresh(:,2) confidence(:,2) sur_values_at_thresh(:,2)];
 
-%______________________________________________________________________
-% NEED TO DEFINE SUR AT THRESHOLDS!!!
-%______________________________________________________________________
-
-
-p_thresh_with_confidence = [p_thresh transpose(len_plats(1,:))];
-p_thres_full_info = [p_thresh_with_confidence sur_at_thresholds]
 % this is set up in such a way that the last plateau is not counted if it goes all the way to the end, so basically only plateaus
 % that end are counted.
-
 % ________________________________________________________________________
+%______________________________________________________________________
+% 2D PLOT OF THRESHOLDS WITH CONFIDENCE BAND (THE HIKER'S SHADOW)
+%______________________________________________________________________
+%
+% plot for Betti 0
+%
+B0=figure;
+hold on;
+plot( 1:46 , p_thresh(:,1), 'r', 1:46 , p_thresh(:,1) - 0.5*p_thresh_full_info{1}(:,2), 'b',1:46 , p_thresh(:,1)+0.5*p_thresh_full_info{1}(:,2), 'b',1:46, mean(p_thresh(find(p_thresh(:,1) ~= 0 & ~isnan(p_thresh(:,1) ) ),1))*ones(46,1),'g');
+%p_ave = plot(1:46, mean(p_thresh(find(p_thresh(:,1) ~= 0 ),1))*ones(46,1),'g');
+grid on;
+xlim([0 46]);
+%legend("all","exclude max","<95 percentile","null","null exclude max");
+titulo= sprintf("Persistence threshold function with confidence parameter: Betti %d, sim %d", 0, sim_number);
+title(titulo,'FontSize', 20);
+xlabel("time in days",'FontSize', 20);
+ylabel("persistence",'FontSize', 20);
+hold off;
+% plot for Betti 1
+B1=figure;
+hold on;
+plot( 1:46 , p_thresh(:,2), 'r', 1:46 , p_thresh(:,2) - 0.5*p_thresh_full_info{2}(:,2), 'b',1:46 , p_thresh(:,2)+0.5*p_thresh_full_info{2}(:,2), 'b');
+p_ave = plot( 1:46, mean( p_thresh( find( p_thresh( : , 2 ) ~= 0 & ~isnan(p_thresh(:,2)) ),2))*ones(46,1),'g');
+grid on;
+xlim([0 46]);
+%legend("all","exclude max","<95 percentile","null","null exclude max");
+titulo= sprintf("Persistence threshold function with confidence parameter: Betti %d, sim %d", 1, sim_number);
+title(titulo,'FontSize', 20);
+xlabel("time in days",'FontSize', 20);
+ylabel("persistence",'FontSize', 20);
+%______________________________________________________________________
+% 3D PLOT OF THRESHOLD IN TIME ON SURFACE (THE HIKER'S PATH)
+%______________________________________________________________________
+
+
+
+%______________________________________________________________________
+% 3D PLOT OF THRESHOLD IN TIME ON SURFACE (THE HIKER'S AND THE MOUNTAIN)
+%______________________________________________________________________
 
 
 
